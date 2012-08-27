@@ -2,6 +2,7 @@ package examples
 
 import org.specs2._
 import specification.{Step, Then, When, Given}
+import org.scalacheck.Arbitrary
 
 /**
  * Notes:
@@ -9,7 +10,7 @@ import specification.{Step, Then, When, Given}
  *  - in this kind of specification all the text is maintained in one place and annotated on the side with the operations to perform
  *
  *  - we also use regular expression to extract the interesting bits in the description text
- *  
+ *
  *  - note that no variables are used, the current "state" is passed around by using functions which should have the proper type
  *    i.e after a Given[Sale] I can have a When[Sale, Sale] but not a When[Int, Sale]
  */
@@ -114,4 +115,40 @@ class Variation5 extends Specification { def is =
 
   "GST should apply on ordinary articles" ^
    { Sale.of(1, "shirt").forANetPriceOf(10).gstIs(10).totalPrice === 11  }
+}
+
+import specification.gen
+import org.scalacheck.Gen._
+
+/**
+ * Notes:
+ *
+ *  - if your steps are generic enough, you can check that they are still valid with generated data
+ *  - this uses ScalaCheck: https://github.com/rickynils/scalacheck
+ */
+class Variation6 extends Specification with ScalaCheck { def is =
+
+  "GST should apply on ordinary articles"                    ^
+    "Given we are selling a shirt"                           ^ sale^
+    "When we calculate the price including a GST"            ^ calculate^
+    "Then the price should include the GST"                  ^ price
+
+
+  def sale = new gen.Given[Sale] {
+    def extract(s: String) = choose(1.0, 100.0).map { price =>
+      Sale.of(1, "shirt").forANetPriceOf(price)
+    }
+  }
+
+  def calculate = new gen.When[Sale, Sale] {
+    def extract(sale: Sale, s: String) = choose[Double](1, 20).map { gst: Double =>
+      sale.gstIs(gst)
+    }
+  }
+
+  def price = new gen.Then[Sale] {
+    def extract(s: String)(implicit a: Arbitrary[Sale]) = prop { (sale: Sale) =>
+      sale.totalPrice must be_==(100.0)
+    }
+  }
 }
